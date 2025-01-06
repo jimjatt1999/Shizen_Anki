@@ -175,7 +175,7 @@ def init_auth():
     # Add development mode toggle in sidebar
     st.sidebar.checkbox("🛠️ Development Mode", 
                        key='DEV_MODE', 
-                       value=False,  # Set to False for production
+                       value=False,
                        help="Toggle between development and production mode")
 
     if st.session_state.DEV_MODE:
@@ -207,4 +207,44 @@ def render_auth_page():
 
     st.title("自然暗記 - Login")
     
-    tab1, tab2 = st.tabs(<span class="ml-2" /><span class="inline-block w-3 h-3 rounded-full bg-neutral-a12 align-middle mb-[0.1rem]" />
+    tab1, tab2 = st.tabs(["Login", "Register"])
+    
+    with tab1:
+        with st.form("login_form"):
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            submit = st.form_submit_button("Login")
+            
+            if submit:
+                if not username or not password:
+                    st.error("Please enter both username and password")
+                else:
+                    success, user_id = st.session_state.auth_system.login_user(username, password)
+                    if success:
+                        st.session_state.user_id = user_id
+                        st.rerun()
+                    else:
+                        st.error("Invalid credentials")
+    
+    with tab2:
+        with st.form("register_form"):
+            new_username = st.text_input("Choose Username")
+            new_password = st.text_input("Choose Password", type="password")
+            confirm_password = st.text_input("Confirm Password", type="password")
+            submit = st.form_submit_button("Register")
+            
+            if submit:
+                if not new_username or not new_password:
+                    st.error("Please fill in all fields")
+                elif new_password != confirm_password:
+                    st.error("Passwords don't match")
+                elif len(new_password) < 8:
+                    st.error("Password must be at least 8 characters")
+                else:
+                    success, error = st.session_state.auth_system.register_user(new_username, new_password)
+                    if success:
+                        st.success("Registration successful! Please login.")
+                    else:
+                        st.error(f"Registration failed: {error}")
+    
+    return False

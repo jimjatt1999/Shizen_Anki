@@ -3,25 +3,24 @@ import psycopg2
 from passlib.hash import pbkdf2_sha256
 from datetime import datetime
 
-# Store DEV_MODE in session state so it persists
+# Store DEV_MODE in session state
 if 'DEV_MODE' not in st.session_state:
     st.session_state.DEV_MODE = False
 
 class AuthSystem:
     def __init__(self):
-        # Local PostgreSQL connection parameters
-        self.db_params = {
-            "host": "localhost",
-            "database": "postgres",
-            "user": "postgres",
-            "password": "",
-            "port": "5432"
-        }
-        self._init_db()
+        try:
+            # Get database URL from Streamlit secrets
+            self.db_url = st.secrets["postgres"]["url"]
+            self._init_db()
+        except Exception as e:
+            st.error(f"Failed to initialize database: {e}")
+            if st.session_state.DEV_MODE:
+                st.info("Continuing in development mode...")
 
     def _init_db(self):
         try:
-            conn = psycopg2.connect(**self.db_params)
+            conn = psycopg2.connect(self.db_url)
             cur = conn.cursor()
             
             # Create users table
@@ -34,7 +33,7 @@ class AuthSystem:
                 )
             """)
             
-            # Create user_data table for storing app state
+            # Create user_data table
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS user_data (
                     user_id INTEGER REFERENCES users(id),
@@ -48,8 +47,9 @@ class AuthSystem:
             conn.commit()
             
         except psycopg2.Error as e:
-            st.error(f"Database initialization failed: {e}")
-            st.info("Make sure PostgreSQL is running locally")
+            if not st.session_state.DEV_MODE:
+                st.error(f"Database initialization failed: {e}")
+            st.info("Make sure PostgreSQL URL is configured in .streamlit/secrets.toml")
         finally:
             if 'cur' in locals():
                 cur.close()
@@ -58,7 +58,7 @@ class AuthSystem:
 
     def _get_connection(self):
         try:
-            return psycopg2.connect(**self.db_params)
+            return psycopg2.connect(self.db_url)
         except psycopg2.Error as e:
             st.error(f"Database connection failed: {e}")
             return None
@@ -175,6 +175,8 @@ def init_auth():
                 st.session_state.auth_system = AuthSystem()
             except Exception as e:
                 st.error(f"Failed to initialize auth system: {e}")
+                st.session_state.DEV_MODE = True
+                st.session_state.user_id = 1
         
         if 'user_id' not in st.session_state:
             st.session_state.user_id = None

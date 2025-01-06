@@ -3,11 +3,15 @@ import psycopg2
 from passlib.hash import pbkdf2_sha256
 from datetime import datetime
 
-# Initialize session state variables
+# Initialize all session state variables at the start
 if 'DEV_MODE' not in st.session_state:
     st.session_state.DEV_MODE = False
 if 'auth_initialized' not in st.session_state:
     st.session_state.auth_initialized = False
+if 'auth_system' not in st.session_state:
+    st.session_state.auth_system = None
+if 'user_id' not in st.session_state:
+    st.session_state.user_id = None
 
 class AuthSystem:
     def __init__(self):
@@ -35,11 +39,11 @@ class AuthSystem:
                 return
             
             self._init_db()
-            st.session_state.auth_initialized = True
             
         except Exception as e:
             st.error(f"❌ Failed to initialize database: {str(e)}")
             st.info("💡 Check Streamlit settings > Secrets")
+            raise
 
     def _init_db(self):
         try:
@@ -83,6 +87,7 @@ class AuthSystem:
             st.error(f"❌ Database error: {str(e)}")
             st.error(f"Error code: {e.pgcode}")
             st.error(f"Error message: {e.pgerror}")
+            raise
         finally:
             if 'cur' in locals():
                 cur.close()
@@ -199,10 +204,11 @@ class AuthSystem:
 def init_auth():
     try:
         # Add development mode toggle in sidebar
-        st.sidebar.checkbox("🛠️ Development Mode", 
-                           key='DEV_MODE', 
-                           value=False,
-                           help="Toggle between development and production mode")
+        st.session_state.DEV_MODE = st.sidebar.checkbox(
+            "🛠️ Development Mode", 
+            value=st.session_state.DEV_MODE,
+            help="Toggle between development and production mode"
+        )
 
         if st.session_state.DEV_MODE:
             st.session_state.user_id = 1
@@ -212,9 +218,7 @@ def init_auth():
         if not st.session_state.auth_initialized:
             st.write("🔄 Initializing authentication system...")
             st.session_state.auth_system = AuthSystem()
-            
-        if 'user_id' not in st.session_state:
-            st.session_state.user_id = None
+            st.session_state.auth_initialized = True
 
     except Exception as e:
         st.error(f"❌ Authentication initialization error: {str(e)}")

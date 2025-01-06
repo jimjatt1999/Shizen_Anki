@@ -12,12 +12,17 @@ class AuthSystem:
         try:
             # Get database parameters from Streamlit secrets
             self.db_params = {
-                "user": st.secrets["postgres"]["user"],
-                "password": st.secrets["postgres"]["password"],
-                "host": st.secrets["postgres"]["host"],
-                "port": st.secrets["postgres"]["port"],
-                "dbname": st.secrets["postgres"]["dbname"]
+                "user": st.secrets.postgres.user,
+                "password": st.secrets.postgres.password,
+                "host": st.secrets.postgres.host,
+                "port": st.secrets.postgres.port,
+                "dbname": st.secrets.postgres.dbname
             }
+            # Debug info
+            st.write("Connection parameters:", {
+                k: v if k != 'password' else '****' 
+                for k, v in self.db_params.items()
+            })
             self._init_db()
         except Exception as e:
             st.error(f"Failed to initialize database: {e}")
@@ -202,44 +207,4 @@ def render_auth_page():
 
     st.title("自然暗記 - Login")
     
-    tab1, tab2 = st.tabs(["Login", "Register"])
-    
-    with tab1:
-        with st.form("login_form"):
-            username = st.text_input("Username")
-            password = st.text_input("Password", type="password")
-            submit = st.form_submit_button("Login")
-            
-            if submit:
-                if not username or not password:
-                    st.error("Please enter both username and password")
-                else:
-                    success, user_id = st.session_state.auth_system.login_user(username, password)
-                    if success:
-                        st.session_state.user_id = user_id
-                        st.rerun()
-                    else:
-                        st.error("Invalid credentials")
-    
-    with tab2:
-        with st.form("register_form"):
-            new_username = st.text_input("Choose Username")
-            new_password = st.text_input("Choose Password", type="password")
-            confirm_password = st.text_input("Confirm Password", type="password")
-            submit = st.form_submit_button("Register")
-            
-            if submit:
-                if not new_username or not new_password:
-                    st.error("Please fill in all fields")
-                elif new_password != confirm_password:
-                    st.error("Passwords don't match")
-                elif len(new_password) < 8:
-                    st.error("Password must be at least 8 characters")
-                else:
-                    success, error = st.session_state.auth_system.register_user(new_username, new_password)
-                    if success:
-                        st.success("Registration successful! Please login.")
-                    else:
-                        st.error(f"Registration failed: {error}")
-    
-    return False
+    tab1, tab2 = st.tabs(<span class="ml-2" /><span class="inline-block w-3 h-3 rounded-full bg-neutral-a12 align-middle mb-[0.1rem]" />

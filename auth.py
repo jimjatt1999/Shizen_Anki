@@ -10,19 +10,10 @@ if 'DEV_MODE' not in st.session_state:
 class AuthSystem:
     def __init__(self):
         try:
-            # Get database parameters from Streamlit secrets
-            self.db_params = {
-                "user": st.secrets.postgres.user,
-                "password": st.secrets.postgres.password,
-                "host": st.secrets.postgres.host,
-                "port": st.secrets.postgres.port,
-                "dbname": st.secrets.postgres.dbname
-            }
+            # Get database URL from Streamlit secrets
+            self.db_url = st.secrets["postgres"]["url"]
             # Debug info
-            st.write("Connection parameters:", {
-                k: v if k != 'password' else '****' 
-                for k, v in self.db_params.items()
-            })
+            st.write("Attempting to connect to database...")
             self._init_db()
         except Exception as e:
             st.error(f"Failed to initialize database: {e}")
@@ -31,7 +22,7 @@ class AuthSystem:
 
     def _init_db(self):
         try:
-            conn = psycopg2.connect(**self.db_params)
+            conn = psycopg2.connect(self.db_url)
             cur = conn.cursor()
             
             # Create users table
@@ -61,7 +52,7 @@ class AuthSystem:
         except psycopg2.Error as e:
             if not st.session_state.DEV_MODE:
                 st.error(f"Database initialization failed: {e}")
-            st.info("Make sure PostgreSQL parameters are configured in .streamlit/secrets.toml")
+            st.info("Make sure PostgreSQL URL is configured in .streamlit/secrets.toml")
         finally:
             if 'cur' in locals():
                 cur.close()
@@ -70,7 +61,7 @@ class AuthSystem:
 
     def _get_connection(self):
         try:
-            return psycopg2.connect(**self.db_params)
+            return psycopg2.connect(self.db_url)
         except psycopg2.Error as e:
             st.error(f"Database connection failed: {e}")
             return None

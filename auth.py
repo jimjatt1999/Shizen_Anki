@@ -3,9 +3,11 @@ import psycopg2
 from passlib.hash import pbkdf2_sha256
 from datetime import datetime
 
-# Store DEV_MODE in session state
+# Initialize session state variables
 if 'DEV_MODE' not in st.session_state:
     st.session_state.DEV_MODE = False
+if 'auth_initialized' not in st.session_state:
+    st.session_state.auth_initialized = False
 
 class AuthSystem:
     def __init__(self):
@@ -27,23 +29,24 @@ class AuthSystem:
                     st.write("🔌 Attempting database connection...")
                 else:
                     st.error("❌ Missing 'url' in postgres configuration")
-                    raise ValueError("Database URL not found in secrets")
+                    return
             else:
                 st.error("❌ Missing 'postgres' section in secrets")
-                raise ValueError("Postgres configuration not found")
+                return
             
             self._init_db()
+            st.session_state.auth_initialized = True
+            
         except Exception as e:
             st.error(f"❌ Failed to initialize database: {str(e)}")
             st.info("💡 Check Streamlit settings > Secrets")
-            raise
 
     def _init_db(self):
         try:
             st.write("🔄 Connecting to database...")
             conn = psycopg2.connect(
                 self.db_url,
-                connect_timeout=10  # Add timeout for better error messages
+                connect_timeout=10
             )
             st.write("✓ Connection established")
             
@@ -80,7 +83,6 @@ class AuthSystem:
             st.error(f"❌ Database error: {str(e)}")
             st.error(f"Error code: {e.pgcode}")
             st.error(f"Error message: {e.pgerror}")
-            raise
         finally:
             if 'cur' in locals():
                 cur.close()
@@ -89,10 +91,7 @@ class AuthSystem:
 
     def _get_connection(self):
         try:
-            st.write("🔄 Opening database connection...")
-            conn = psycopg2.connect(self.db_url)
-            st.write("✓ Connection successful")
-            return conn
+            return psycopg2.connect(self.db_url)
         except psycopg2.Error as e:
             st.error(f"❌ Connection failed: {str(e)}")
             return None
@@ -116,9 +115,7 @@ class AuthSystem:
             
         except psycopg2.Error as e:
             if "duplicate key" in str(e):
-                st.error("❌ Username already exists")
                 return False, "Username already exists"
-            st.error(f"❌ Registration error: {str(e)}")
             return False, str(e)
         finally:
             if 'cur' in locals():
@@ -141,8 +138,7 @@ class AuthSystem:
             
             if result and pbkdf2_sha256.verify(password, result[1]):
                 st.write("✓ Login successful")
-                return True, result[0]  # Return user_id
-            st.write("❌ Invalid credentials")
+                return True, result[0]
             return False, None
             
         except psycopg2.Error as e:
@@ -160,7 +156,6 @@ class AuthSystem:
         
         try:
             cur = conn.cursor()
-            st.write("🔄 Saving user data...")
             cur.execute("""
                 INSERT INTO user_data (user_id, data_key, data_value, updated_at)
                 VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
@@ -169,11 +164,10 @@ class AuthSystem:
             """, (user_id, data_key, data_value, data_value))
             
             conn.commit()
-            st.write("✓ Data saved successfully")
             return True
             
         except psycopg2.Error as e:
-            st.error(f"❌ Error saving data: {str(e)}")
+            st.error(f"❌ Error saving user data: {str(e)}")
             return False
         finally:
             if 'cur' in locals():
@@ -187,20 +181,15 @@ class AuthSystem:
         
         try:
             cur = conn.cursor()
-            st.write("🔄 Loading user data...")
             cur.execute(
                 "SELECT data_value FROM user_data WHERE user_id = %s AND data_key = %s",
                 (user_id, data_key)
             )
             result = cur.fetchone()
-            if result:
-                st.write("✓ Data loaded successfully")
-            else:
-                st.write("ℹ️ No data found")
             return result[0] if result else None
             
         except psycopg2.Error as e:
-            st.error(f"❌ Error loading data: {str(e)}")
+            st.error(f"❌ Error loading user data: {str(e)}")
             return None
         finally:
             if 'cur' in locals():
@@ -208,37 +197,34 @@ class AuthSystem:
             conn.close()
 
 def init_auth():
-    # Add development mode toggle in sidebar
-    st.sidebar.checkbox("🛠️ Development Mode", 
-                       key='DEV_MODE', 
-                       value=False,
-                       help="Toggle between development and production mode")
+    try:
+        # Add development mode toggle in sidebar
+        st.sidebar.checkbox("🛠️ Development Mode", 
+                           key='DEV_MODE', 
+                           value=False,
+                           help="Toggle between development and production mode")
 
-    if st.session_state.DEV_MODE:
-        if 'user_id' not in st.session_state:
+        if st.session_state.DEV_MODE:
             st.session_state.user_id = 1
-    else:
-        if 'auth_system' not in st.session_state:
-            try:
-                st.write("🔄 Initializing authentication system...")
-                st.session_state.auth_system = AuthSystem()
-            except Exception as e:
-                st.error(f"❌ Failed to initialize auth system: {str(e)}")
-                st.session_state.DEV_MODE = True
-                st.session_state.user_id = 1
-        
+            st.sidebar.warning("🛠️ Development Mode Active")
+            return
+
+        if not st.session_state.auth_initialized:
+            st.write("🔄 Initializing authentication system...")
+            st.session_state.auth_system = AuthSystem()
+            
         if 'user_id' not in st.session_state:
             st.session_state.user_id = None
 
+    except Exception as e:
+        st.error(f"❌ Authentication initialization error: {str(e)}")
+        st.session_state.DEV_MODE = True
+        st.session_state.user_id = 1
+
 def render_auth_page():
     if st.session_state.DEV_MODE:
-        # Development mode: auto-login
-        if 'user_id' not in st.session_state:
-            st.session_state.user_id = 1
-        st.sidebar.warning("🛠️ Development Mode Active")
         return True
 
-    # Production mode authentication
     if st.session_state.user_id:
         return True
 

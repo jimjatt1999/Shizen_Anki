@@ -20,6 +20,7 @@ import ollama
 import pickle
 from pathlib import Path
 import shutil
+from auth import init_auth, render_auth_page
 
 
 st.set_page_config(
@@ -2109,6 +2110,17 @@ def render_text_input(key_prefix=""):
             st.warning("Please enter some text")
     
 def main():
+    # Initialize authentication first
+    init_auth()
+    
+    # Check if user is logged in
+    if not render_auth_page():
+        return
+    
+    # Initialize user-specific data storage
+    user_data_path = f"./data/user_{st.session_state.user_id}"
+    
+    # Continue with existing initialization
     init_streamlit()
     
     st.title("自然暗記 - Natural Anki")
@@ -2116,10 +2128,15 @@ def main():
     
     # Sidebar content
     with st.sidebar:
-        # Add source management section at the top
+        # Add logout button at top
+        if st.button("�logout", type="secondary"):
+            st.session_state.user_id = None
+            st.session_state.initialized = False
+            st.rerun()
+            
+        # Rest of your existing sidebar code
         st.markdown("### 📚 Content Sources")
         
-        # Show quick stats of sources
         if st.session_state.content_manager.active_sources:
             epub_count = len([s for s in st.session_state.content_manager.active_sources.values() if s['type'] == 'epub'])
             text_count = len([s for s in st.session_state.content_manager.active_sources.values() if s['type'] == 'text'])
@@ -2214,7 +2231,6 @@ def main():
             """, unsafe_allow_html=True)
     
     # Main content area
-    # Quick search
     search_query = st.text_input("🔍 Search cards", 
         help="Filter cards by text content",
         placeholder="Type to search...",
@@ -2229,7 +2245,7 @@ def main():
         "Learn", 
         "Schedule", 
         "Stats", 
-        "Sources",  # New tab
+        "Sources",
         "Chat with Tutor"
     ])
     
@@ -2261,7 +2277,7 @@ def main():
             st.session_state.time_tracker
         )
     
-    with tab4:  # Sources tab
+    with tab4:
         st.markdown("### Content Sources")
         
         # EPUB Books section

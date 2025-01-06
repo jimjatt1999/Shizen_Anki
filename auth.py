@@ -10,20 +10,45 @@ if 'DEV_MODE' not in st.session_state:
 class AuthSystem:
     def __init__(self):
         try:
-            # Get database URL from Streamlit secrets
-            self.db_url = st.secrets["postgres"]["url"]
-            # Debug info
-            st.write("Attempting to connect to database...")
+            # Debug: Show available secrets
+            st.write("🔍 Checking Streamlit secrets...")
+            st.write("Available secrets:", list(st.secrets.keys()))
+            
+            if 'postgres' in st.secrets:
+                st.write("✓ Found postgres configuration")
+                if 'url' in st.secrets.postgres:
+                    self.db_url = st.secrets.postgres.url
+                    # Hide password in debug output
+                    safe_url = self.db_url.replace(
+                        self.db_url.split(':')[2].split('@')[0], 
+                        '****'
+                    )
+                    st.write("📌 Database URL:", safe_url)
+                    st.write("🔌 Attempting database connection...")
+                else:
+                    st.error("❌ Missing 'url' in postgres configuration")
+                    raise ValueError("Database URL not found in secrets")
+            else:
+                st.error("❌ Missing 'postgres' section in secrets")
+                raise ValueError("Postgres configuration not found")
+            
             self._init_db()
         except Exception as e:
-            st.error(f"Failed to initialize database: {e}")
-            if st.session_state.DEV_MODE:
-                st.info("Continuing in development mode...")
+            st.error(f"❌ Failed to initialize database: {str(e)}")
+            st.info("💡 Check Streamlit settings > Secrets")
+            raise
 
     def _init_db(self):
         try:
-            conn = psycopg2.connect(self.db_url)
+            st.write("🔄 Connecting to database...")
+            conn = psycopg2.connect(
+                self.db_url,
+                connect_timeout=10  # Add timeout for better error messages
+            )
+            st.write("✓ Connection established")
+            
             cur = conn.cursor()
+            st.write("🔄 Creating tables if they don't exist...")
             
             # Create users table
             cur.execute("""
@@ -34,6 +59,7 @@ class AuthSystem:
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             """)
+            st.write("✓ Users table ready")
             
             # Create user_data table
             cur.execute("""
@@ -45,14 +71,16 @@ class AuthSystem:
                     PRIMARY KEY (user_id, data_key)
                 )
             """)
+            st.write("✓ User data table ready")
             
             conn.commit()
-            st.success("Database connection successful!")
+            st.success("✅ Database initialization successful!")
             
         except psycopg2.Error as e:
-            if not st.session_state.DEV_MODE:
-                st.error(f"Database initialization failed: {e}")
-            st.info("Make sure PostgreSQL URL is configured in .streamlit/secrets.toml")
+            st.error(f"❌ Database error: {str(e)}")
+            st.error(f"Error code: {e.pgcode}")
+            st.error(f"Error message: {e.pgerror}")
+            raise
         finally:
             if 'cur' in locals():
                 cur.close()
@@ -61,9 +89,12 @@ class AuthSystem:
 
     def _get_connection(self):
         try:
-            return psycopg2.connect(self.db_url)
+            st.write("🔄 Opening database connection...")
+            conn = psycopg2.connect(self.db_url)
+            st.write("✓ Connection successful")
+            return conn
         except psycopg2.Error as e:
-            st.error(f"Database connection failed: {e}")
+            st.error(f"❌ Connection failed: {str(e)}")
             return None
 
     def register_user(self, username, password):
@@ -73,17 +104,21 @@ class AuthSystem:
         
         try:
             cur = conn.cursor()
+            st.write("🔄 Registering new user...")
             password_hash = pbkdf2_sha256.hash(password)
             cur.execute(
                 "INSERT INTO users (username, password_hash) VALUES (%s, %s)",
                 (username, password_hash)
             )
             conn.commit()
+            st.write("✓ User registered successfully")
             return True, None
             
         except psycopg2.Error as e:
             if "duplicate key" in str(e):
+                st.error("❌ Username already exists")
                 return False, "Username already exists"
+            st.error(f"❌ Registration error: {str(e)}")
             return False, str(e)
         finally:
             if 'cur' in locals():
@@ -97,6 +132,7 @@ class AuthSystem:
         
         try:
             cur = conn.cursor()
+            st.write("🔄 Attempting login...")
             cur.execute(
                 "SELECT id, password_hash FROM users WHERE username = %s",
                 (username,)
@@ -104,11 +140,13 @@ class AuthSystem:
             result = cur.fetchone()
             
             if result and pbkdf2_sha256.verify(password, result[1]):
+                st.write("✓ Login successful")
                 return True, result[0]  # Return user_id
+            st.write("❌ Invalid credentials")
             return False, None
             
         except psycopg2.Error as e:
-            st.error(f"Login error: {e}")
+            st.error(f"❌ Login error: {str(e)}")
             return False, None
         finally:
             if 'cur' in locals():
@@ -122,6 +160,7 @@ class AuthSystem:
         
         try:
             cur = conn.cursor()
+            st.write("🔄 Saving user data...")
             cur.execute("""
                 INSERT INTO user_data (user_id, data_key, data_value, updated_at)
                 VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
@@ -130,10 +169,11 @@ class AuthSystem:
             """, (user_id, data_key, data_value, data_value))
             
             conn.commit()
+            st.write("✓ Data saved successfully")
             return True
             
         except psycopg2.Error as e:
-            st.error(f"Error saving user data: {e}")
+            st.error(f"❌ Error saving data: {str(e)}")
             return False
         finally:
             if 'cur' in locals():
@@ -147,15 +187,20 @@ class AuthSystem:
         
         try:
             cur = conn.cursor()
+            st.write("🔄 Loading user data...")
             cur.execute(
                 "SELECT data_value FROM user_data WHERE user_id = %s AND data_key = %s",
                 (user_id, data_key)
             )
             result = cur.fetchone()
+            if result:
+                st.write("✓ Data loaded successfully")
+            else:
+                st.write("ℹ️ No data found")
             return result[0] if result else None
             
         except psycopg2.Error as e:
-            st.error(f"Error loading user data: {e}")
+            st.error(f"❌ Error loading data: {str(e)}")
             return None
         finally:
             if 'cur' in locals():
@@ -175,9 +220,10 @@ def init_auth():
     else:
         if 'auth_system' not in st.session_state:
             try:
+                st.write("🔄 Initializing authentication system...")
                 st.session_state.auth_system = AuthSystem()
             except Exception as e:
-                st.error(f"Failed to initialize auth system: {e}")
+                st.error(f"❌ Failed to initialize auth system: {str(e)}")
                 st.session_state.DEV_MODE = True
                 st.session_state.user_id = 1
         

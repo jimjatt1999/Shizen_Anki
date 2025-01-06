@@ -10,8 +10,14 @@ if 'DEV_MODE' not in st.session_state:
 class AuthSystem:
     def __init__(self):
         try:
-            # Get database URL from Streamlit secrets
-            self.db_url = st.secrets["postgres"]["url"]
+            # Get database parameters from Streamlit secrets
+            self.db_params = {
+                "user": st.secrets["postgres"]["user"],
+                "password": st.secrets["postgres"]["password"],
+                "host": st.secrets["postgres"]["host"],
+                "port": st.secrets["postgres"]["port"],
+                "dbname": st.secrets["postgres"]["dbname"]
+            }
             self._init_db()
         except Exception as e:
             st.error(f"Failed to initialize database: {e}")
@@ -20,7 +26,7 @@ class AuthSystem:
 
     def _init_db(self):
         try:
-            conn = psycopg2.connect(self.db_url)
+            conn = psycopg2.connect(**self.db_params)
             cur = conn.cursor()
             
             # Create users table
@@ -45,11 +51,12 @@ class AuthSystem:
             """)
             
             conn.commit()
+            st.success("Database connection successful!")
             
         except psycopg2.Error as e:
             if not st.session_state.DEV_MODE:
                 st.error(f"Database initialization failed: {e}")
-            st.info("Make sure PostgreSQL URL is configured in .streamlit/secrets.toml")
+            st.info("Make sure PostgreSQL parameters are configured in .streamlit/secrets.toml")
         finally:
             if 'cur' in locals():
                 cur.close()
@@ -58,7 +65,7 @@ class AuthSystem:
 
     def _get_connection(self):
         try:
-            return psycopg2.connect(self.db_url)
+            return psycopg2.connect(**self.db_params)
         except psycopg2.Error as e:
             st.error(f"Database connection failed: {e}")
             return None
@@ -163,7 +170,7 @@ def init_auth():
     # Add development mode toggle in sidebar
     st.sidebar.checkbox("🛠️ Development Mode", 
                        key='DEV_MODE', 
-                       value=True,
+                       value=False,  # Set to False for production
                        help="Toggle between development and production mode")
 
     if st.session_state.DEV_MODE:

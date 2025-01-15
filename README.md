@@ -61,8 +61,4 @@ MIT License
 
 ## Planned Features
 
-- Content recommendations
-- Social sharing features
-- Enhanced difficulty analysis
-- Mobile support
-- Multi-language support
+just a demo for proof of concept
